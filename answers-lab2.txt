@@ -1,0 +1,46 @@
+Answer for Questions 1:
+    uintptr_t, because va is used in applications. It can be observed from the code in pmap.c:
+
+    static physaddr_t
+    check_va2pa(pde_t *pgdir, uintptr_t va)
+    {
+        pte_t *p;
+
+        pgdir = &pgdir[PDX(va)];
+        if (!(*pgdir & PTE_P))
+            return ~0;
+        p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
+        if (!(p[PTX(va)] & PTE_P))
+            return ~0;
+        return PTE_ADDR(p[PTX(va)]);
+    }
+
+
+Answer for Questions2:
+    Q: We have placed the kernel and user environment in the same address space. Why will user
+    programs not be able to read or write the kernel’s memory? What specific mechanisms 
+    protect the kernel memory?
+    A: Because PTE_U is not enabled in user programs.
+
+    Q: What is the maximum amount of physical memory that this operating system can support? 
+    Why?
+    A: 2G, becuase the maximum size of UPAGES is 4MB, sizeof(struct PageInfo))=8Byte, so we 
+    can have at most 4MB/8B=512K pages, the size of one page is 4KB, so we can have at most 
+    4MB/8B*4KB)=2GB physical memory.
+
+    Q: How much space overhead is there for managing memory, if we actually had the maximum
+    amount of physical memory? How is this overhead broken down?
+    A: We need 4MB PageInfos to manage memory plus 2MB for Page Table plus 4KB for Page 
+    Directory if we have 2GB physical memory. Total:6MB+4KB
+
+    Q: Revisit the page table setup in kern/entry.S and kern/entrypgdir.c. Immediately after 
+    we turn on paging, EIP is still a low number (a little over 1MB). At what point do we 
+    transition to running at an EIP above KERNBASE? What makes it possible for us to continue 
+    executing at a low EIP between when we enable paging and when we begin running at an EIP 
+    above KERNBASE? Why is this transition necessary?
+    A: After jmp *%eax finished. It is possible because entry_pgdir also maps va [0, 4M) to 
+    pa [0, 4M), it's necessary because later a kern_pgdir will be loaded and va [0, 4M) will 
+    be abandoned.
+
+
+

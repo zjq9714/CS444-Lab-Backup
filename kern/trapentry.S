@@ -42,8 +42,61 @@
 	pushl $(num);							\
 	jmp _alltraps
 
-.text
+#define ec(name, num)\
+.data;\
+	.long name;\
+.text;\
+	.globl name;\
+	.type name, @function;\
+	.align 2;\
+name:\
+	pushl $(num);\
+	jmp _alltraps
 
+#define noec(name, num)\
+.data;\
+	.long name;\
+.text;\
+	.globl name;\
+	.type name, @function;\
+	.align 2;\
+name:\
+	pushl $0;\
+	pushl $(num);\
+	jmp _alltraps
+
+#define zhanwei()\
+.data;\
+	.long 0
+
+.data
+	.p2align 2
+	.globl funs
+funs:
+.text
+/*
+ */
+	noec(th0, 0)
+	noec(th1, 1)
+	zhanwei()
+	noec(th3, 3)
+	noec(th4, 4)
+	noec(th5, 5)
+	noec(th6, 6)
+	noec(th7, 7)
+	ec(th8, 8)
+	noec(th9, 9)
+	ec(th10, 10)
+	ec(th11, 11)
+	ec(th12, 12)
+	ec(th13, 13)
+	ec(th14, 14)
+	zhanwei()
+	noec(th16, 16)
+.data
+	.space 124
+.text
+	noec(th48, 48)
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
  */
@@ -60,3 +113,13 @@
  */
 
 
+_alltraps:
+	pushl %ds
+	pushl %es
+	pushal
+	pushl $GD_KD
+	popl %ds
+	pushl $GD_KD
+	popl %es
+	pushl %esp
+	call trap
