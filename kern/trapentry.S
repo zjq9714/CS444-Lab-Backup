@@ -42,7 +42,6 @@
 	pushl $(num);							\
 	jmp _alltraps
 
-
 #define ec(name, num)\
 .data;\
 	.long name;\
@@ -76,7 +75,6 @@ name:\
 funs:
 .text
 /*
- * Challenge: my code here
  */
 	noec(th0, 0)
 	noec(th1, 1)
@@ -96,31 +94,25 @@ funs:
 	zhanwei()
 	noec(th16, 16)
 .data
-	.space 60
+	.space 124
 .text
-	noec(th32, 32)
-	noec(th33, 33)
-	noec(th34, 34)
-	noec(th35, 35)
-	noec(th36, 36)
-	noec(th37, 37)
-	noec(th38, 38)
-	noec(th39, 39)
-	noec(th40, 40)
-	noec(th41, 41)
-	noec(th42, 42)
-	noec(th43, 43)
-	noec(th44, 44)
-	noec(th45, 45)
-	noec(th46, 46)
-	noec(th47, 47)
 	noec(th48, 48)
+/*
+ * Lab 3: Your code here for generating entry points for the different traps.
+ */
+
+// HINT 1 : TRAPHANDLER_NOEC(t_divide, T_DIVIDE);
+//          Do something like this if there is no error code for the trap
+// HINT 2 : TRAPHANDLER(t_dblflt, T_DBLFLT);
+//          Do something like this if the trap includes an error code..
+// HINT 3 : READ Intel's manual to check if the trap includes an error code
+//          or not...
 
 /*
  * Lab 3: Your code here for _alltraps
  */
 
- 
+
 _alltraps:
 	pushl %ds
 	pushl %es

@@ -56,7 +56,7 @@ static const char *trapname(int trapno)
 		"SIMD Floating-Point Exception"
 	};
 
-	if (trapno < sizeof(excnames)/sizeof(excnames[0]))
+	if (trapno < ARRAY_SIZE(excnames))
 		return excnames[trapno];
 	if (trapno == T_SYSCALL)
 		return "System call";
@@ -66,12 +66,23 @@ static const char *trapname(int trapno)
 }
 
 
+// XYZ: write a function declaration here...
+// e.g., void t_divide();
 
 void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
 
+    /*
+     *
+     * HINT
+     * Do something like this: SETGATE(idt[T_DIVIDE], 0, GD_KT, t_divide, 0);
+     * if your trap handler's name for divide by zero is t_device.
+     * Additionally, you should declare trap handler as a function
+     * to refer that in C code... (see the comment XYZ above)
+     *
+     */
 	// LAB 3: Your code here.
 	// void th0();
 	// void th1();
@@ -106,9 +117,9 @@ trap_init(void)
 
 	// Challenge:
 	extern void (*funs[])();
-	// cprintf("funs %x\n", funs);
-	// cprintf("funs[0] %x\n", funs[0]);
-	// cprintf("funs[47] %x\n", funs[47]);
+	cprintf("funs %x\n", funs);
+	cprintf("funs[0] %x\n", funs[0]);
+	cprintf("funs[48] %x\n", funs[48]);
 	int i;
 	for (i = 0; i <= 16; ++i)
 		if (i==T_BRKPT)
@@ -117,11 +128,7 @@ trap_init(void)
 			SETGATE(idt[i], 0, GD_KT, funs[i], 0);
 		}
 	SETGATE(idt[48], 0, GD_KT, funs[48], 3);
-
-	for (i = 0; i < 16; ++i)
-		SETGATE(idt[IRQ_OFFSET+i], 0, GD_KT, funs[IRQ_OFFSET+i], 0);
-
-	// Per-CPU setup 
+	// Per-CPU setup
 	trap_init_percpu();
 }
 
@@ -143,6 +150,8 @@ trap_init_percpu(void)
 	//     rather than the global "ts" variable;
 	//   - Use gdt[(GD_TSS0 >> 3) + i] for CPU i's TSS descriptor;
 	//   - You mapped the per-CPU kernel stacks in mem_init_mp()
+	//   - Initialize cpu_ts.ts_iomb to prevent unauthorized environments
+	//     from doing IO (0 is not the correct value!)
 	//
 	// ltr sets a 'busy' flag in the TSS selector, so if you
 	// accidentally load the same TSS on more than one CPU, you'll
@@ -151,21 +160,21 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
-	int cid = thiscpu->cpu_id;
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - cid * (KSTKSIZE + KSTKGAP);
-	thiscpu->cpu_ts.ts_ss0 = GD_KD;
+	ts.ts_esp0 = KSTACKTOP;
+	ts.ts_ss0 = GD_KD;
+	ts.ts_iomb = sizeof(struct Taskstate);
 
 	// Initialize the TSS slot of the gdt.
-	gdt[(GD_TSS0 >> 3)+cid] = SEG16(STS_T32A, (uint32_t) (&(thiscpu->cpu_ts)),
-					sizeof(struct Taskstate), 0);
-	gdt[(GD_TSS0 >> 3)+cid].sd_s = 0;
+	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
+					sizeof(struct Taskstate) - 1, 0);
+	gdt[GD_TSS0 >> 3].sd_s = 0;
 
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0+8*cid);
+	ltr(GD_TSS0);
 
 	// Load the IDT
 	lidt(&idt_pd);
@@ -223,24 +232,6 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 
-	if (tf->tf_trapno == T_PGFLT) {
-		// cprintf("PAGE FAULT\n");
-		page_fault_handler(tf);
-		return;
-	}
-	if (tf->tf_trapno == T_BRKPT) {
-		// cprintf("BREAK POINT\n");
-		monitor(tf);
-		return;
-	}
-	if (tf->tf_trapno == T_SYSCALL) {
-		// cprintf("SYSTEM CALL\n");
-		tf->tf_regs.reg_eax = 
-			syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx,
-				tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
-		return;
-	}
-
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
 	// IRQ line or other reasons. We don't care.
@@ -253,14 +244,24 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
-	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
-		// cprintf("Timer\n");
-		lapic_eoi();
-		sched_yield();
+
+	if (tf->tf_trapno == T_PGFLT) {
+		cprintf("PAGE FAULT\n");
+		page_fault_handler(tf);
 		return;
 	}
-
-
+	if (tf->tf_trapno == T_BRKPT) {
+		cprintf("BREAK POINT\n");
+		monitor(tf);
+		return;
+	}
+	if (tf->tf_trapno == T_SYSCALL) {
+		cprintf("SYSTEM CALL\n");
+		tf->tf_regs.reg_eax =
+			syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx,
+				tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		return;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -297,8 +298,6 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
-		lock_kernel();
-
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
@@ -340,14 +339,12 @@ page_fault_handler(struct Trapframe *tf)
 
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
-	// cprintf("fault_va: %x\n", fault_va);
 
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-	if ((tf->tf_cs&3) == 0) {
+	if ((tf->tf_cs&3) == 0)
 		panic("Kernel page fault!");
-	}
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
@@ -360,13 +357,14 @@ page_fault_handler(struct Trapframe *tf)
 	// we branch to the page fault upcall recursively, pushing another
 	// page fault stack frame on top of the user exception stack.
 	//
-	// The trap handler needs one word of scratch space at the top of the
-	// trap-time stack in order to return.  In the non-recursive case, we
-	// don't have to worry about this because the top of the regular user
-	// stack is free.  In the recursive case, this means we have to leave
-	// an extra word between the current top of the exception stack and
-	// the new stack frame because the exception stack _is_ the trap-time
-	// stack.
+	// It is convenient for our code which returns from a page fault
+	// (lib/pfentry.S) to have one word of scratch space at the top of the
+	// trap-time stack; it allows us to more easily restore the eip/esp. In
+	// the non-recursive case, we don't have to worry about this because
+	// the top of the regular user stack is free.  In the recursive case,
+	// this means we have to leave an extra word between the current top of
+	// the exception stack and the new stack frame because the exception
+	// stack _is_ the trap-time stack.
 	//
 	// If there's no page fault upcall, the environment didn't allocate a
 	// page for its exception stack or can't write to it, or the exception
@@ -381,28 +379,6 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
-	if (curenv->env_pgfault_upcall) {
-		struct UTrapframe *utf;
-		uintptr_t utf_addr;
-		if (UXSTACKTOP-PGSIZE<=tf->tf_esp && tf->tf_esp<=UXSTACKTOP-1)
-			utf_addr = tf->tf_esp - sizeof(struct UTrapframe) - 4;
-		else 
-			utf_addr = UXSTACKTOP - sizeof(struct UTrapframe);
-		user_mem_assert(curenv, (void*)utf_addr, sizeof(struct UTrapframe), PTE_W);//1 is enough
-		utf = (struct UTrapframe *) utf_addr;
-
-		utf->utf_fault_va = fault_va;
-		utf->utf_err = tf->tf_err;
-		utf->utf_regs = tf->tf_regs;
-		utf->utf_eip = tf->tf_eip;
-		utf->utf_eflags = tf->tf_eflags;
-		utf->utf_esp = tf->tf_esp;
-
-//		curenv->env_tf.env_tf
-		curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
-		curenv->env_tf.tf_esp = utf_addr;
-		env_run(curenv);
-	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
