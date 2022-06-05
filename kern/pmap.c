@@ -598,7 +598,24 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	//panic("mmio_map_region not implemented");
+
+    size_t round_size = ROUNDUP(pa + size, PGSIZE);
+    physaddr_t round_pa = ROUNDDOWN(pa, PGSIZE);
+    round_size -= round_pa;
+
+    size_t old_base = base;
+    size_t next_base = old_base + round_size;
+
+    if (next_base >= MMIOLIM) {
+        panic("overflow MMIOLIM!");
+    }
+
+    boot_map_region(kern_pgdir,
+        old_base, round_size, round_pa, PTE_W | PTE_PCD | PTE_PWT);
+
+    base = next_base;
+    return (void *)old_base;
 }
 
 static uintptr_t user_mem_check_addr;
