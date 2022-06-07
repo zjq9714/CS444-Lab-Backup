@@ -251,6 +251,39 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	//   check the current permissions on the page.
 
 	// LAB 4: Your code here.
+	struct Env *src_env, *dest_env;
+	int ret = envid2env(srcenvid, &src_env, 1);
+	if (ret) {
+        return ret;
+    }
+	ret = envid2env(dstenvid, &dest_env, 1);
+	if (ret) {
+        return ret;
+    }
+
+	if (srcva>=(void*)UTOP || dstva>=(void*)UTOP ||
+		ROUNDDOWN(srcva,PGSIZE)!=srcva || ROUNDDOWN(dstva,PGSIZE)!=dstva) {
+		return -E_INVAL;
+    }
+
+	pte_t *ptentry;
+	struct PageInfo *pg = page_lookup(src_env->env_pgdir, srcva, &ptentry);
+	if (!pg) {
+        return -E_INVAL;
+    }
+
+	int flag = PTE_U | PTE_P;
+	if ((perm & flag) != flag) {
+        return -E_INVAL;
+    }
+
+	if (((*ptentry & PTE_W) == 0) && (perm&PTE_W)) {
+        return -E_INVAL;
+    }
+
+	ret = page_insert(dest_env->env_pgdir, pg, dstva, perm);
+	return ret;
+
 	panic("sys_page_map not implemented");
 }
 
@@ -267,7 +300,19 @@ sys_page_unmap(envid_t envid, void *va)
 	// Hint: This function is a wrapper around page_remove().
 
 	// LAB 4: Your code here.
-	panic("sys_page_unmap not implemented");
+	// panic("sys_page_unmap not implemented");
+	struct Env *env = NULL;
+	if (va>=(void*)UTOP || ROUNDDOWN(va,PGSIZE)!=va) {
+		return -E_INVAL;
+    }
+	int ret = envid2env(envid, &env, 1);
+	if (ret) {
+        return ret;
+    }
+
+	page_remove(env->env_pgdir, va);
+	return 0;
+
 }
 
 // Try to send 'value' to the target env 'envid'.
@@ -312,7 +357,46 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	// panic("sys_ipc_try_send not implemented");
+	struct Env *env = NULL;
+    unsigned pwu = PTE_P| PTE_W | PTE_U;
+	int retval = envid2env(envid, &env, 0);
+	if (retval) {
+        return retval;
+    }
+
+	if (!env->env_ipc_recving) {
+        return -E_IPC_NOT_RECV;
+    }
+	if (srcva < (void*)UTOP) {
+		pte_t *pte;
+		struct PageInfo *pg = page_lookup(curenv->env_pgdir, srcva, &pte);
+		if (!pg) {
+            return -E_INVAL;
+        }
+		if ((*pte & perm & pwu) != (perm & pwu)) {
+            return -E_INVAL;
+        }
+		if ((perm & PTE_W) && !(*pte & PTE_W)) {
+            return -E_INVAL;
+        }
+		if (srcva != ROUNDDOWN(srcva, PGSIZE)) {
+            return -E_INVAL;
+        }
+		if (env->env_ipc_dstva < (void*)UTOP) {
+			retval = page_insert(env->env_pgdir, pg, env->env_ipc_dstva, perm);
+			if (retval) {
+                return retval;
+            }
+			env->env_ipc_perm = perm;
+		}
+	}
+	env->env_ipc_value = value;
+	env->env_ipc_recving = 0;
+	env->env_status = ENV_RUNNABLE;
+	env->env_ipc_from = curenv->env_id;
+	env->env_tf.tf_regs.reg_eax = 0;
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -330,7 +414,14 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	// cprintf("sys_ipc_recv dstva: %x\n", dstva);
+	if (dstva < (void*)UTOP)
+		if (dstva != ROUNDDOWN(dstva, PGSIZE))
+			return -E_INVAL;
+	curenv->env_ipc_recving = 1;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	curenv->env_ipc_dstva = dstva;
+	sys_yield();
 	return 0;
 }
 
