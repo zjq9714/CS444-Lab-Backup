@@ -225,7 +225,6 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	if (generation <= 0)	// Don't create a negative env_id.
 		generation = 1 << ENVGENSHIFT;
 	e->env_id = generation | (e - envs);
-	cprintf("envs: %x, e: %x, e->env_id: %x\n", envs, e, e->env_id);
 
 	// Set the basic status variables.
 	e->env_parent_id = parent_id;
@@ -256,6 +255,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
+	e->env_tf.tf_eflags |= FL_IF;
 
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
@@ -267,7 +267,6 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	env_free_list = e->env_link;
 	*newenv_store = e;
 
-	cprintf("env_id, %x\n", e->env_id);
 	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 	return 0;
 }
@@ -533,10 +532,9 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 	// cprintf("curenv: %x, e: %x\n", curenv, e);
-	cprintf("\n");
 	if (curenv != e) {
-		// if (curenv->env_status == ENV_RUNNING)
-		// 	curenv->env_status = ENV_RUNNABLE;
+		if (curenv && curenv->env_status == ENV_RUNNING)
+			curenv->env_status = ENV_RUNNABLE;
 		curenv = e;
 		e->env_status = ENV_RUNNING;
 		e->env_runs++;
