@@ -117,9 +117,6 @@ trap_init(void)
 
 	// Challenge:
 	extern void (*funs[])();
-	cprintf("funs %x\n", funs);
-	cprintf("funs[0] %x\n", funs[0]);
-	cprintf("funs[48] %x\n", funs[48]);
 	int i;
 	for (i = 0; i <= 16; ++i)
 		if (i==T_BRKPT)
@@ -128,6 +125,10 @@ trap_init(void)
 			SETGATE(idt[i], 0, GD_KT, funs[i], 0);
 		}
 	SETGATE(idt[48], 0, GD_KT, funs[48], 3);
+
+	for (i = 0; i < 16; ++i)
+		SETGATE(idt[IRQ_OFFSET+i], 0, GD_KT, funs[IRQ_OFFSET+i], 0);
+
 	// Per-CPU setup
 	trap_init_percpu();
 }
