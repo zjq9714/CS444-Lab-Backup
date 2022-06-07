@@ -235,6 +235,10 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			putch(ch, putdat);
 			break;
 
+		case 'm':
+			num = getint(&ap, lflag);
+			break;
+
 		// unrecognized escape sequence - just print it literally
 		default:
 			putch('%', putdat);
