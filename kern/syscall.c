@@ -90,7 +90,19 @@ sys_exofork(void)
 	// will appear to return 0.
 
 	// LAB 4: Your code here.
-	panic("sys_exofork not implemented");
+	// panic("sys_exofork not implemented");
+    int retval = 0;
+    struct Env *env = NULL;
+    retval = env_alloc(&env, curenv->env_id);
+    if (retval < 0) {
+        return retval;
+    }
+
+    env->env_status = ENV_NOT_RUNNABLE;
+    env->env_tf = curenv->env_tf;
+    env->env_tf.tf_regs.reg_eax = 0;
+
+    return env->env_id;
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
@@ -110,7 +122,22 @@ sys_env_set_status(envid_t envid, int status)
 	// envid's status.
 
 	// LAB 4: Your code here.
-	panic("sys_env_set_status not implemented");
+	// panic("sys_env_set_status not implemented");
+    struct Env *env = NULL;
+    int retval = 0;
+
+    // check status
+    if (status != ENV_RUNNABLE
+        && status != ENV_NOT_RUNNABLE) {
+        return -E_INVAL;
+    }
+
+    retval = envid2env(envid, &env, 1);
+    if (retval == 0) {
+        env->env_status = status;
+    }
+
+    return retval;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -125,7 +152,16 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	// panic("sys_env_set_pgfault_upcall not implemented");
+    struct Env *env = NULL;
+    int retval = 0;
+
+    retval = envid2env(envid, &env, 1);
+    if (retval == 0) {
+        env->env_pgfault_upcall = func;
+    }
+
+    return retval;
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -155,7 +191,36 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	//   allocated!
 
 	// LAB 4: Your code here.
-	panic("sys_page_alloc not implemented");
+	// panic("sys_page_alloc not implemented");
+    int retval = 0;
+    struct Env *env = NULL; 
+    retval = envid2env(envid, &env, 1);
+    if (retval) {
+        return retval;
+    }
+
+    if (va >= (void*)UTOP) {
+        return -E_INVAL;
+    }
+
+    int flag = PTE_U|PTE_P;
+    if ((perm & flag) != flag) {
+        return -E_INVAL;
+    }
+
+    struct PageInfo *pg = page_alloc(1);
+    if (!pg) { 
+        return -E_NO_MEM;
+    }
+
+    pg->pp_ref++;
+    retval = page_insert(env->env_pgdir, pg, va, perm);
+    if (retval) {
+        page_free(pg);
+        return retval;
+    }
+
+    return 0;
 }
 
 // Map the page of memory at 'srcva' in srcenvid's address space
@@ -294,6 +359,23 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
         case SYS_yield:
             sys_yield();
+        case SYS_env_set_pgfault_upcall:
+            ret = sys_env_set_pgfault_upcall(a1, (void *)a2);
+            break;
+        case SYS_exofork:
+            ret = sys_exofork();
+            break;
+        case SYS_env_set_status:
+            ret = sys_env_set_status(a1, a2);
+            break;
+        case SYS_page_alloc:
+            ret = sys_page_alloc(a1, (void *)a2, a3);
+            break;
+        case SYS_page_map:
+            ret = sys_page_map(a1, (void *)a2, a3, (void *)a4, a5);
+            break;
+        case SYS_page_unmap:
+            ret = sys_page_unmap(a1, (void *)a2);
 		default:
 			ret = -E_INVAL;
 	}
