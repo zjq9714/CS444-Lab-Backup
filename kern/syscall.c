@@ -376,6 +376,13 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
             break;
         case SYS_page_unmap:
             ret = sys_page_unmap(a1, (void *)a2);
+            break;
+        case SYS_ipc_try_send:
+            ret = sys_ipc_try_send(a1, a2, (void *)a3, a4);
+            break;
+        case SYS_ipc_recv:
+            ret = sys_ipc_recv((void *)a1);
+            break;
 		default:
 			ret = -E_INVAL;
 	}
