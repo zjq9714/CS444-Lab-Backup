@@ -244,19 +244,25 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		// cprintf("Timer\n");
+		lapic_eoi();
+		sched_yield();
+		return;
+	}
 
 	if (tf->tf_trapno == T_PGFLT) {
-		cprintf("PAGE FAULT\n");
+		// cprintf("PAGE FAULT\n");
 		page_fault_handler(tf);
 		return;
 	}
 	if (tf->tf_trapno == T_BRKPT) {
-		cprintf("BREAK POINT\n");
+		// cprintf("BREAK POINT\n");
 		monitor(tf);
 		return;
 	}
 	if (tf->tf_trapno == T_SYSCALL) {
-		cprintf("SYSTEM CALL\n");
+		// cprintf("SYSTEM CALL\n");
 		tf->tf_regs.reg_eax =
 			syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx,
 				tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
